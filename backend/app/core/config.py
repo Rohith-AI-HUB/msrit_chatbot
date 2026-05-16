@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # Session Memory — keep 3 turns only to avoid prompt bloat
     MAX_CHAT_HISTORY: int = 3
 
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     # Crawling
     MAX_CRAWL_PAGES: int = 50
     REQUEST_TIMEOUT: int = 15

@@ -1,6 +1,7 @@
-from collections import defaultdict
-from typing import Dict
+import json
 from typing import List
+
+import redis
 
 from app.core.config import settings
 from app.core.logging import setup_logger
@@ -8,29 +9,26 @@ from app.core.logging import setup_logger
 
 logger = setup_logger("session_service")
 
+SESSION_TTL = 1800  # 30 minutes
+
 
 class SessionService:
 
-    # =========================
-    # Temporary In-Memory Store
-    # =========================
-    #
-    # Structure:
-    #
-    # {
-    #     session_id: [
-    #         {
-    #             "question": "...",
-    #             "answer": "..."
-    #         }
-    #     ]
-    # }
-    #
-    # =========================
-    _sessions: Dict[
-        str,
-        List[dict]
-    ] = defaultdict(list)
+    _redis = None
+
+    @classmethod
+    def get_redis(cls):
+        if cls._redis is None:
+            logger.info(f"Connecting to Redis: {settings.REDIS_URL}")
+            cls._redis = redis.from_url(
+                settings.REDIS_URL,
+                decode_responses=True
+            )
+        return cls._redis
+
+    @classmethod
+    def _key(cls, session_id: str) -> str:
+        return f"session:{session_id}"
 
     @classmethod
     def add_message(
@@ -40,27 +38,23 @@ class SessionService:
         answer: str
     ) -> None:
 
-        cls._sessions[session_id].append({
+        r = cls.get_redis()
+        key = cls._key(session_id)
+
+        message = json.dumps({
             "question": question,
             "answer": answer
         })
 
-        logger.info(
-            f"Message added to session: "
-            f"{session_id}"
-        )
+        r.rpush(key, message)
 
-        # Limit memory growth
-        if (
-            len(cls._sessions[session_id])
-            > settings.MAX_CHAT_HISTORY
-        ):
+        # Trim to keep only the last MAX_CHAT_HISTORY messages
+        r.ltrim(key, -settings.MAX_CHAT_HISTORY, -1)
 
-            cls._sessions[session_id] = (
-                cls._sessions[session_id][
-                    -settings.MAX_CHAT_HISTORY:
-                ]
-            )
+        # Reset TTL on every new message
+        r.expire(key, SESSION_TTL)
+
+        logger.info(f"Message added to session: {session_id}")
 
     @classmethod
     def get_history(
@@ -68,10 +62,12 @@ class SessionService:
         session_id: str
     ) -> List[dict]:
 
-        return cls._sessions.get(
-            session_id,
-            []
-        )
+        r = cls.get_redis()
+        key = cls._key(session_id)
+
+        messages = r.lrange(key, 0, -1)
+
+        return [json.loads(m) for m in messages]
 
     @classmethod
     def get_recent_history(
@@ -79,30 +75,20 @@ class SessionService:
         session_id: str
     ) -> str:
 
-        history = cls.get_history(
-            session_id
-        )
+        history = cls.get_history(session_id)
 
         if not history:
-
             return ""
 
         formatted_history = []
 
         for item in history[-3:]:
-
             formatted_history.append(
-                (
-                    f"User: "
-                    f"{item['question']}\n"
-                    f"Assistant: "
-                    f"{item['answer']}"
-                )
+                f"User: {item['question']}\n"
+                f"Assistant: {item['answer']}"
             )
 
-        return "\n\n".join(
-            formatted_history
-        )
+        return "\n\n".join(formatted_history)
 
     @classmethod
     def clear_session(
@@ -110,14 +96,9 @@ class SessionService:
         session_id: str
     ) -> None:
 
-        if session_id in cls._sessions:
-
-            del cls._sessions[session_id]
-
-            logger.info(
-                f"Session cleared: "
-                f"{session_id}"
-            )
+        r = cls.get_redis()
+        r.delete(cls._key(session_id))
+        logger.info(f"Session cleared: {session_id}")
 
     @classmethod
     def session_exists(
@@ -125,7 +106,14 @@ class SessionService:
         session_id: str
     ) -> bool:
 
-        return (
-            session_id
-            in cls._sessions
-        )
+        r = cls.get_redis()
+        return r.exists(cls._key(session_id)) > 0
+
+    @classmethod
+    def health_check(cls) -> bool:
+        try:
+            r = cls.get_redis()
+            return r.ping()
+        except Exception as e:
+            logger.error(f"Redis health check failed: {e}")
+            return False

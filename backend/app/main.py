@@ -7,6 +7,7 @@ from app.api.routes.chat import router as chat_router
 from app.core.config import settings
 from app.core.logging import setup_logger
 from app.db.vector_store import VectorStoreManager
+from app.services.session_service import SessionService
 
 
 logger = setup_logger("main")
@@ -44,6 +45,7 @@ def health_check():
     return {
         "status": "healthy",
         "vector_db": VectorStoreManager.health_check(),
+        "redis": SessionService.health_check(),
     }
 
 
