@@ -93,6 +93,20 @@ class VectorDBBuilder:
             logger.warning(f"Deleting existing vector DB: {db_path}")
             shutil.rmtree(db_path)
 
+    def deduplicate_chunks(self, chunks: list[Document]) -> list[Document]:
+        """Remove chunks with duplicate content (same text, different source is OK)."""
+        seen = set()
+        unique = []
+        for chunk in chunks:
+            key = chunk.page_content.strip()[:300]  # first 300 chars as fingerprint
+            if key not in seen:
+                seen.add(key)
+                unique.append(chunk)
+        removed = len(chunks) - len(unique)
+        if removed:
+            logger.info(f"Deduplicated {removed} duplicate chunks")
+        return unique
+
     def build(self):
         logger.info("Starting vector DB build")
 
@@ -103,17 +117,31 @@ class VectorDBBuilder:
             raise RuntimeError("No documents parsed")
 
         chunks = self.chunk_documents(documents)
+        chunks = self.deduplicate_chunks(chunks)
         self.clear_existing_db()
 
-        logger.info("Creating Chroma vector DB")
-        Chroma.from_documents(
-            documents=chunks,
-            embedding=self.embedding_model,
-            persist_directory=str(settings.VECTOR_DB_DIR)
-        )
+        # Embed and insert in batches so progress is visible and memory stays low
+        BATCH_SIZE = 200
+        total = len(chunks)
+        logger.info(f"Creating Chroma vector DB — {total} chunks in batches of {BATCH_SIZE}")
+
+        db = None
+        for i in range(0, total, BATCH_SIZE):
+            batch = chunks[i : i + BATCH_SIZE]
+            pct = (i + len(batch)) / total * 100
+            print(f"  Embedding batch {i // BATCH_SIZE + 1}/{(total + BATCH_SIZE - 1) // BATCH_SIZE}"
+                  f"  ({i + len(batch)}/{total} chunks, {pct:.0f}%)", flush=True)
+            if db is None:
+                db = Chroma.from_documents(
+                    documents=batch,
+                    embedding=self.embedding_model,
+                    persist_directory=str(settings.VECTOR_DB_DIR)
+                )
+            else:
+                db.add_documents(batch)
+
         logger.info("Vector DB created successfully")
 
-        # Log page_type distribution for verification
         from collections import Counter
         type_counts = Counter(c.metadata.get("page_type", "general") for c in chunks)
         logger.info(f"Chunk distribution by page_type: {dict(type_counts)}")

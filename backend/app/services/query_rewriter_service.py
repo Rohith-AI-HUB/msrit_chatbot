@@ -19,7 +19,7 @@ class QueryRewriterService:
         return not any(p in lowered for p in cls.INVALID_PATTERNS)
 
     @classmethod
-    def rewrite_query(cls, question: str) -> str:
+    def rewrite_query(cls, question: str, recent_history: str = "") -> str:
         question = question.strip()
 
         if not question:
@@ -31,7 +31,7 @@ class QueryRewriterService:
             logger.info("Skipping rewrite for single-word query")
             return question
 
-        prompt = build_rewrite_prompt(question)
+        prompt = build_rewrite_prompt(question, recent_history=recent_history)
 
         logger.info(f"Rewriting query: {question}")
 

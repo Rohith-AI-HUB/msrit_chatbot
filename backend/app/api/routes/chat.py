@@ -29,6 +29,10 @@ from app.services.session_service import (
     SessionService
 )
 
+from app.services.result_service import (
+    ResultService
+)
+
 from app.utils.prompts import (
     build_chat_prompt,
     build_no_context_response
@@ -67,13 +71,44 @@ def chat(
         )
 
         # =========================
+        # Result Flow (before RAG)
+        # =========================
+        result_response = ResultService.handle(
+            session_id=request.session_id,
+            question=request.question
+        )
+        if result_response is not None:
+            SessionService.add_message(
+                session_id=request.session_id,
+                question=request.question,
+                answer=result_response
+            )
+            return ChatResponse(
+                answer=result_response,
+                sources=[],
+                rewritten_query="",
+                retrieved_documents_count=0,
+                debug_chunks=[]
+            )
+
+        # =========================
+        # Session History (needed before rewrite)
+        # =========================
+        recent_history = (
+            SessionService.get_recent_history(
+                request.session_id
+            )
+        )
+
+        # =========================
         # Rewrite Query
         # =========================
         rewrite_start = time.time()
 
         rewritten_query = (
             QueryRewriterService.rewrite_query(
-                request.question
+                request.question,
+                recent_history=recent_history
             )
         )
 
@@ -214,15 +249,6 @@ def chat(
                         preview=preview
                     )
                 )
-
-        # =========================
-        # Session History
-        # =========================
-        recent_history = (
-            SessionService.get_recent_history(
-                request.session_id
-            )
-        )
 
         logger.info(
             f"Recent history length: "

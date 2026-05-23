@@ -16,7 +16,7 @@ class RetrievalService:
     FACTUAL_KEYWORDS = [
         "naac", "nba", "nirf", "ranking", "accreditation",
         "accredited", "fees", "fee", "address", "email",
-        "phone", "grade",
+        "phone", "grade", "hostel", "mess",
     ]
 
     HOMEPAGE_PENALTY_SOURCES = [
@@ -55,6 +55,9 @@ class RetrievalService:
         if cls.is_cse_faculty_question(question):
             return f"{rewritten_query} MSRIT CSE faculty Computer Science Department Professor Assistant Professor"
 
+        if any(w in q for w in ["hostel", "accommodation", "mess", "dormitory"]):
+            return f"{rewritten_query} MSRIT hostel accommodation fee charges mess"
+
         if cls.is_pg_question(question):
             return f"{rewritten_query} MSRIT postgraduate programs M.Tech MBA MCA M.Arch"
 
@@ -63,6 +66,9 @@ class RetrievalService:
 
         if any(w in q for w in ["department", "departments", "branch", "branches"]):
             return f"{rewritten_query} MSRIT engineering departments"
+
+        if any(w in q for w in ["fee", "fees", "tuition", "cost", "charges"]):
+            return f"{rewritten_query} MSRIT fee structure tuition charges"
 
         return rewritten_query
 
@@ -84,14 +90,27 @@ class RetrievalService:
     def keyword_boost(cls, question: str, docs: List[Document]) -> List[Document]:
         q = question.lower()
         accreditation_terms = ["naac", "nba", "accredited", "a+", "ranking", "nirf"]
+        hostel_terms = ["hostel", "accommodation", "mess", "single", "double", "bed", "room"]
+        fee_terms = ["fee", "tuition", "charges", "amount", "rs.", "₹", "lakh", "per year"]
 
         for doc in docs:
             content = doc.page_content.lower()
+            source = doc.metadata.get("source", "").lower()
             score = doc.metadata.get("adjusted_score", 0)
 
             if any(k in q for k in ["naac", "nba", "accreditation", "nirf", "ranking", "grade"]):
                 matches = sum(1 for t in accreditation_terms if t in content)
                 score += matches * 0.08
+
+            if any(k in q for k in ["hostel", "accommodation", "mess"]):
+                matches = sum(1 for t in hostel_terms if t in content)
+                score += matches * 0.06
+                if "hostel" in source:
+                    score += 0.15  # strong boost for the Hostel.pdf document
+
+            if any(k in q for k in ["fee", "fees", "tuition", "charges", "cost"]):
+                matches = sum(1 for t in fee_terms if t in content)
+                score += matches * 0.05
 
             doc.metadata["boosted_score"] = round(score, 4)
 
