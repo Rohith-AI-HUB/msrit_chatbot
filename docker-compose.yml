@@ -1,11 +1,39 @@
 version: "3.9"
 
+# =============================================
+# MSRIT AI Chatbot — Docker Compose
+# =============================================
+#
+# Usage:
+#   docker compose up --build          # first run
+#   docker compose up -d               # background
+#   docker compose down -v             # stop + wipe volumes
+#
+# Required env:
+#   GROQ_API_KEY — set in .env or export before running
+# =============================================
+
 services:
 
-  # =============================================
-  # APPLICATION SERVICES
-  # =============================================
+  # ------------------------------------------
+  # FRONTEND — React SPA served by Nginx
+  # ------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      chat-orchestrator:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - msrit-net
 
+  # ------------------------------------------
+  # CHAT ORCHESTRATOR — Main API gateway
+  # ------------------------------------------
   chat-orchestrator:
     build:
       context: ./services
@@ -16,6 +44,7 @@ services:
       - RETRIEVAL_SERVICE_URL=http://retrieval-service:8001
       - LLM_SERVICE_URL=http://llm-service:8002
       - SESSION_SERVICE_URL=http://session-service:8003
+      - REQUEST_TIMEOUT=30
     depends_on:
       retrieval-service:
         condition: service_healthy
@@ -23,7 +52,19 @@ services:
         condition: service_healthy
       session-service:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - msrit-net
 
+  # ------------------------------------------
+  # RETRIEVAL SERVICE — ChromaDB vector search
+  # ------------------------------------------
   retrieval-service:
     build:
       context: ./services
@@ -31,16 +72,26 @@ services:
     ports:
       - "8001:8001"
     volumes:
-      - ./backend/data:/app/data
+      - ./backend/data:/app/data              # persistent ChromaDB
+      - hf_cache:/root/.cache/huggingface     # embedding model cache
     environment:
       - VECTOR_DB_DIR=/app/data/chroma_db
+      - EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+      - RETRIEVAL_TOP_K=6
+      - RETRIEVAL_FETCH_K=20
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 60s
+      start_period: 60s   # extra time for model load on first start
+    restart: unless-stopped
+    networks:
+      - msrit-net
 
+  # ------------------------------------------
+  # LLM SERVICE — Groq API + Redis cache
+  # ------------------------------------------
   llm-service:
     build:
       context: ./services
@@ -49,7 +100,10 @@ services:
       - "8002:8002"
     environment:
       - GROQ_API_KEY=${GROQ_API_KEY}
+      - LLM_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
+      - LLM_TEMPERATURE=0.0
       - REDIS_URL=redis://redis:6379/0
+      - CACHE_TTL=3600
     depends_on:
       redis:
         condition: service_healthy
@@ -59,7 +113,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
+    restart: unless-stopped
+    networks:
+      - msrit-net
 
+  # ------------------------------------------
+  # SESSION SERVICE — conversation history
+  # ------------------------------------------
   session-service:
     build:
       context: ./services
@@ -68,6 +128,8 @@ services:
       - "8003:8003"
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - MAX_CHAT_HISTORY=3
+      - SESSION_TTL=1800
     depends_on:
       redis:
         condition: service_healthy
@@ -77,40 +139,41 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
+    restart: unless-stopped
+    networks:
+      - msrit-net
 
-  # =============================================
-  # DATA STORES
-  # =============================================
-
+  # ------------------------------------------
+  # REDIS — shared cache & session store
+  # ------------------------------------------
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    command: redis-server --appendonly yes   # persist data across restarts
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
+    networks:
+      - msrit-net
 
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: chatbot
-      POSTGRES_PASSWORD: chatbot
-      POSTGRES_DB: msrit_chatbot
-    ports:
-      - "5432:5432"
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chatbot -d msrit_chatbot"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
+# =============================================
+# VOLUMES
+# =============================================
 volumes:
   redis_data:
-  pg_data:
+    driver: local
+  hf_cache:
+    driver: local
+
+# =============================================
+# NETWORKS
+# =============================================
+networks:
+  msrit-net:
+    driver: bridge
