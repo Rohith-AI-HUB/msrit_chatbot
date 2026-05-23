@@ -34,6 +34,9 @@ Examples:
 User Question: "What all departments are there?"
 Search Query: Departments and academic programs offered at MSRIT
 
+User Question: "What all UG courses are available?"
+Search Query: Undergraduate Bachelor of Engineering B.E. B.Arch courses programs offered at MSRIT
+
 User Question: "hostel fees"
 Search Query: MSRIT hostel fee structure and charges
 
@@ -42,6 +45,12 @@ Search Query: Companies visiting MSRIT for campus placements recruiters
 
 User Question: "Is MSRIT NAAC accredited?"
 Search Query: MSRIT NAAC accreditation grade and status
+
+User Question: "Who is the HOD of CSE?"
+Search Query: Head of Department Professor Head Computer Science Engineering CSE MSRIT
+
+User Question: "Who is the principal?"
+Search Query: Principal Director head MSRIT administration leadership
 
 Now rewrite this.
 

@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-slate-100 text-slate-800;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar but keep scrolling */
+  .scrollbar-thin::-webkit-scrollbar        { width: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-track  { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb  { @apply bg-slate-300 rounded-full; }
+}

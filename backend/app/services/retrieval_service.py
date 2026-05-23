@@ -26,6 +26,11 @@ class RetrievalService:
     ]
 
     @staticmethod
+    def is_ug_question(question: str) -> bool:
+        q = question.lower()
+        return any(k in q for k in ["ug", "undergraduate", "under graduate", "b.e", "be ", "bachelor", "b.arch", "barch"])
+
+    @staticmethod
     def is_pg_question(question: str) -> bool:
         q = question.lower()
         return any(k in q for k in ["pg", "postgraduate", "post graduate", "m.tech", "mtech", "mba", "mca", "m.arch"])
@@ -52,6 +57,9 @@ class RetrievalService:
 
         if cls.is_pg_question(question):
             return f"{rewritten_query} MSRIT postgraduate programs M.Tech MBA MCA M.Arch"
+
+        if cls.is_ug_question(question):
+            return f"{rewritten_query} MSRIT undergraduate Bachelor of Engineering B.E. B.Arch programs courses"
 
         if any(w in q for w in ["department", "departments", "branch", "branches"]):
             return f"{rewritten_query} MSRIT engineering departments"
@@ -129,6 +137,21 @@ class RetrievalService:
                     filter={"source": {"$contains": "faculty"}}
                 )
                 documents.extend(faculty_docs)
+
+            # =====================================
+            # UG Retrieval — targeted similarity search
+            # =====================================
+            if cls.is_ug_question(question):
+                logger.info("Using UG retrieval")
+                ug_query = f"{rewritten_query} Bachelor of Engineering B.E. undergraduate programs courses"
+                ug_docs = db.similarity_search(ug_query, k=settings.RETRIEVAL_FETCH_K)
+                for doc in ug_docs:
+                    content = doc.page_content.lower()
+                    if any(
+                        m in content
+                        for m in ["bachelor of engineering", "b.e.", "b.arch", "undergraduate", "four years"]
+                    ):
+                        documents.append(doc)
 
             # =====================================
             # PG Retrieval — targeted similarity search

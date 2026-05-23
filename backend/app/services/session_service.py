@@ -22,7 +22,9 @@ class SessionService:
             logger.info(f"Connecting to Redis: {settings.REDIS_URL}")
             cls._redis = redis.from_url(
                 settings.REDIS_URL,
-                decode_responses=True
+                decode_responses=True,
+                socket_connect_timeout=2,
+                socket_timeout=2,
             )
         return cls._redis
 
@@ -37,37 +39,30 @@ class SessionService:
         question: str,
         answer: str
     ) -> None:
-
-        r = cls.get_redis()
-        key = cls._key(session_id)
-
-        message = json.dumps({
-            "question": question,
-            "answer": answer
-        })
-
-        r.rpush(key, message)
-
-        # Trim to keep only the last MAX_CHAT_HISTORY messages
-        r.ltrim(key, -settings.MAX_CHAT_HISTORY, -1)
-
-        # Reset TTL on every new message
-        r.expire(key, SESSION_TTL)
-
-        logger.info(f"Message added to session: {session_id}")
+        try:
+            r = cls.get_redis()
+            key = cls._key(session_id)
+            message = json.dumps({"question": question, "answer": answer})
+            r.rpush(key, message)
+            r.ltrim(key, -settings.MAX_CHAT_HISTORY, -1)
+            r.expire(key, SESSION_TTL)
+            logger.info(f"Message added to session: {session_id}")
+        except Exception as e:
+            logger.warning(f"Redis unavailable, session not saved: {e}")
 
     @classmethod
     def get_history(
         cls,
         session_id: str
     ) -> List[dict]:
-
-        r = cls.get_redis()
-        key = cls._key(session_id)
-
-        messages = r.lrange(key, 0, -1)
-
-        return [json.loads(m) for m in messages]
+        try:
+            r = cls.get_redis()
+            key = cls._key(session_id)
+            messages = r.lrange(key, 0, -1)
+            return [json.loads(m) for m in messages]
+        except Exception as e:
+            logger.warning(f"Redis unavailable, returning empty history: {e}")
+            return []
 
     @classmethod
     def get_recent_history(
@@ -95,19 +90,23 @@ class SessionService:
         cls,
         session_id: str
     ) -> None:
-
-        r = cls.get_redis()
-        r.delete(cls._key(session_id))
-        logger.info(f"Session cleared: {session_id}")
+        try:
+            r = cls.get_redis()
+            r.delete(cls._key(session_id))
+            logger.info(f"Session cleared: {session_id}")
+        except Exception as e:
+            logger.warning(f"Redis unavailable, clear skipped: {e}")
 
     @classmethod
     def session_exists(
         cls,
         session_id: str
     ) -> bool:
-
-        r = cls.get_redis()
-        return r.exists(cls._key(session_id)) > 0
+        try:
+            r = cls.get_redis()
+            return r.exists(cls._key(session_id)) > 0
+        except Exception:
+            return False
 
     @classmethod
     def health_check(cls) -> bool:
