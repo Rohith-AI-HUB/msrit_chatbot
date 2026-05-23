@@ -30,7 +30,7 @@ desktop.ini
 docker-compose.override.yml
 
 # Data (large files — don't commit to git)
-backend/data/
+
 *.sqlite3
 
 # Kubernetes secrets

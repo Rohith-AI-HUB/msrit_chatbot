@@ -7,7 +7,7 @@ venv/
 .env
 
 # Vector DB
-data/
+data/pdfs
 /tests/
 # OS
 pytest.ini
