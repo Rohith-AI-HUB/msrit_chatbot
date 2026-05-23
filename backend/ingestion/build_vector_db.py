@@ -24,12 +24,16 @@ def infer_page_type(source_url: str) -> str:
         return "postgrad"
     if any(k in url for k in ["fee", "fees", "tuition"]):
         return "fees"
-    if any(k in url for k in ["placement", "career", "recruit"]):
+    if any(k in url for k in ["placement", "career", "recruit", "placement-stats"]):
         return "placements"
-    if any(k in url for k in ["hostel", "accommodation"]):
+    if any(k in url for k in ["hostel", "accommodation", "hostel-fees"]):
         return "hostel"
     if any(k in url for k in ["naac", "nba", "accreditation", "nirf"]):
         return "accreditation"
+    if any(k in url for k in ["department", "dept", "departments-overview"]):
+        return "department"
+    if any(k in url for k in ["admission", "admissions"]):
+        return "admissions"
     return "general"
 
 
@@ -50,7 +54,20 @@ class VectorDBBuilder:
             raise FileNotFoundError(f"Raw data file not found: {data_path}")
         logger.info(f"Loading raw data from: {data_path}")
         with open(data_path, "r", encoding="utf-8") as f:
-            return f.read()
+            raw = f.read()
+
+        # Append supplement file if it exists (curated data for missing sections)
+        supplement_path = Path(settings.SUPPLEMENT_DATA_PATH)
+        if supplement_path.exists():
+            logger.info(f"Loading supplement data from: {supplement_path}")
+            with open(supplement_path, "r", encoding="utf-8") as f:
+                supplement = f.read()
+            raw = raw + "\n\n" + supplement
+            logger.info("Supplement data merged into raw corpus")
+        else:
+            logger.info("No supplement file found — skipping")
+
+        return raw
 
     # ------------------------------------------------------------------
     # Section detection helpers

@@ -33,6 +33,7 @@ class Settings(BaseSettings):
 
     # Data Files
     RAW_DATA_PATH: Path = BASE_DIR / "data" / "msrit_full.txt"
+    SUPPLEMENT_DATA_PATH: Path = BASE_DIR / "data" / "msrit_supplement.txt"
 
     # Retrieval — increased chunk quality + fetch window
     RETRIEVAL_TOP_K: int = 6

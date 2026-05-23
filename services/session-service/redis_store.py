@@ -1,5 +1,5 @@
 import json
-from typing import List
+from typing import List, Optional
 
 import redis
 
@@ -72,3 +72,27 @@ class RedisStore:
         except Exception as e:
             logger.error(f"Redis health check failed: {e}")
             return False
+
+    # ── Portal Flow State ─────────────────────────────────────────────────
+
+    @classmethod
+    def _flow_key(cls, session_id: str) -> str:
+        return f"portal_flow:{session_id}"
+
+    @classmethod
+    def set_flow_state(cls, session_id: str, state: dict) -> None:
+        r = cls.get_redis()
+        r.set(cls._flow_key(session_id), json.dumps(state), ex=settings.SESSION_TTL)
+        logger.info(f"Flow state set for session: {session_id} → {state.get('status')}")
+
+    @classmethod
+    def get_flow_state(cls, session_id: str) -> Optional[dict]:
+        r = cls.get_redis()
+        data = r.get(cls._flow_key(session_id))
+        return json.loads(data) if data else None
+
+    @classmethod
+    def clear_flow_state(cls, session_id: str) -> None:
+        r = cls.get_redis()
+        r.delete(cls._flow_key(session_id))
+        logger.info(f"Flow state cleared for session: {session_id}")

@@ -44,7 +44,9 @@ services:
       - RETRIEVAL_SERVICE_URL=http://retrieval-service:8001
       - LLM_SERVICE_URL=http://llm-service:8002
       - SESSION_SERVICE_URL=http://session-service:8003
+      - PARENTS_SERVICE_URL=http://parents-service:8004
       - REQUEST_TIMEOUT=30
+      - PARENTS_PORTAL_TIMEOUT=60
     depends_on:
       retrieval-service:
         condition: service_healthy
@@ -52,12 +54,33 @@ services:
         condition: service_healthy
       session-service:
         condition: service_healthy
+      parents-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 10s
+    restart: unless-stopped
+    networks:
+      - msrit-net
+
+  # ------------------------------------------
+  # PARENTS PORTAL SERVICE — Marks & Attendance
+  # ------------------------------------------
+  parents-service:
+    build:
+      context: ./services
+      dockerfile: parents-service/Dockerfile
+    ports:
+      - "8004:8004"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s   # Playwright/Chromium install takes time on first start
     restart: unless-stopped
     networks:
       - msrit-net

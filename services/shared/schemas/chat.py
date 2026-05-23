@@ -84,3 +84,11 @@ class AddMessageRequest(BaseModel):
 class SessionHistoryResponse(BaseModel):
     messages: List[dict]
     formatted: str
+
+
+class SetFlowStateRequest(BaseModel):
+    state: dict
+
+
+class FlowStateResponse(BaseModel):
+    state: Optional[dict] = None

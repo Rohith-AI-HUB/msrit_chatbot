@@ -17,6 +17,8 @@ class RetrievalService:
         "naac", "nba", "nirf", "ranking", "accreditation",
         "accredited", "fees", "fee", "address", "email",
         "phone", "grade", "hostel", "mess",
+        "placement", "package", "lpa", "salary", "companies",
+        "department", "departments", "branch", "branches",
     ]
 
     HOMEPAGE_PENALTY_SOURCES = [
@@ -38,10 +40,38 @@ class RetrievalService:
     @staticmethod
     def is_cse_faculty_question(question: str) -> bool:
         q = question.lower()
+        hod_terms = ["hod", "head of department", "head of dept", "head of the department"]
+        faculty_terms = ["faculty", "professor", "teachers"]
+        dept_terms = ["cse", "computer science"]
         return (
-            any(k in q for k in ["faculty", "professor", "teachers"])
-            and any(k in q for k in ["cse", "computer science"])
+            any(k in q for k in faculty_terms + hod_terms)
+            and any(k in q for k in dept_terms)
         )
+
+    @staticmethod
+    def is_main_cse_hod_question(question: str) -> bool:
+        """True when asking about HOD of main CSE (not AI&ML or Cyber Security sub-depts)."""
+        q = question.lower()
+        is_hod = any(k in q for k in ["hod", "head of department", "head of dept", "head of the department", "head"])
+        is_cse = any(k in q for k in ["cse", "computer science"])
+        is_subdept = any(k in q for k in ["ai&ml", "ai ml", "artificial intelligence", "cyber security", "cybersecurity"])
+        return is_hod and is_cse and not is_subdept
+
+    @staticmethod
+    def is_placement_question(question: str) -> bool:
+        q = question.lower()
+        return any(k in q for k in [
+            "placement", "placements", "placed", "recruit", "package",
+            "salary", "lpa", "company", "companies", "job offer", "campus"
+        ])
+
+    @staticmethod
+    def is_department_question(question: str) -> bool:
+        q = question.lower()
+        return any(k in q for k in [
+            "department", "departments", "branch", "branches",
+            "all courses", "all programs", "all departments"
+        ])
 
     @classmethod
     def is_factual_query(cls, question: str) -> bool:
@@ -51,6 +81,9 @@ class RetrievalService:
     @classmethod
     def build_search_query(cls, question: str, rewritten_query: str) -> str:
         q = question.lower()
+
+        if cls.is_main_cse_hod_question(question):
+            return f"{rewritten_query} Head of Department HOD CSE Computer Science Dr R China Appala Naidu MSRIT"
 
         if cls.is_cse_faculty_question(question):
             return f"{rewritten_query} MSRIT CSE faculty Computer Science Department Professor Assistant Professor"
@@ -92,10 +125,13 @@ class RetrievalService:
         accreditation_terms = ["naac", "nba", "accredited", "a+", "ranking", "nirf"]
         hostel_terms = ["hostel", "accommodation", "mess", "single", "double", "bed", "room"]
         fee_terms = ["fee", "tuition", "charges", "amount", "rs.", "₹", "lakh", "per year"]
+        placement_terms = ["placement", "lpa", "package", "companies", "offers", "recruit", "salary"]
+        department_terms = ["department", "engineering", "b.e.", "bachelor", "program", "branch"]
 
         for doc in docs:
             content = doc.page_content.lower()
             source = doc.metadata.get("source", "").lower()
+            page_type = doc.metadata.get("page_type", "")
             score = doc.metadata.get("adjusted_score", 0)
 
             if any(k in q for k in ["naac", "nba", "accreditation", "nirf", "ranking", "grade"]):
@@ -106,11 +142,34 @@ class RetrievalService:
                 matches = sum(1 for t in hostel_terms if t in content)
                 score += matches * 0.06
                 if "hostel" in source:
-                    score += 0.15  # strong boost for the Hostel.pdf document
+                    score += 0.15
 
             if any(k in q for k in ["fee", "fees", "tuition", "charges", "cost"]):
                 matches = sum(1 for t in fee_terms if t in content)
                 score += matches * 0.05
+                if page_type in ("fees", "admissions"):
+                    score += 0.12
+
+            if any(k in q for k in ["placement", "package", "salary", "lpa", "company", "companies", "recruit", "job"]):
+                matches = sum(1 for t in placement_terms if t in content)
+                score += matches * 0.07
+                if page_type == "placements" or "placement" in source:
+                    score += 0.20  # strongly prefer the placement page
+
+            if any(k in q for k in ["department", "departments", "branch", "branches", "programs", "courses"]):
+                matches = sum(1 for t in department_terms if t in content)
+                score += matches * 0.04
+                if page_type == "department" or "department" in source or "departments-overview" in source:
+                    score += 0.15
+
+            # HOD of CSE boost — strongly prefer hod-profiles page and main cse sources
+            if any(k in q for k in ["hod", "head of department", "head of dept"]) and any(k in q for k in ["cse", "computer science"]):
+                if "hod-profiles" in source:
+                    score += 0.40
+                elif "cse" in source and "cse_ai" not in source and "cse_cs" not in source:
+                    score += 0.20
+                elif "cse_ai" in source or "cse_cs" in source:
+                    score -= 0.15  # penalize sub-dept sources for main CSE HOD query
 
             doc.metadata["boosted_score"] = round(score, 4)
 
@@ -146,9 +205,28 @@ class RetrievalService:
 
         try:
             # =====================================
+            # HOD of CSE (main dept) — strongly prefer hod-profiles and cse.html
+            # =====================================
+            if cls.is_main_cse_hod_question(question):
+                logger.info("Using main CSE HOD retrieval")
+                hod_query = "Head of Department HOD CSE Computer Science Dr R China Appala Naidu MSRIT"
+                raw_hod = db.similarity_search(hod_query, k=settings.RETRIEVAL_FETCH_K * 3)
+                # Prefer hod-profiles page, then cse.html sources; exclude ai_ml/cs sub-dept sources
+                hod_docs = [
+                    d for d in raw_hod
+                    if "hod-profiles" in d.metadata.get("source", "").lower()
+                    or (
+                        "cse" in d.metadata.get("source", "").lower()
+                        and "cse_ai" not in d.metadata.get("source", "").lower()
+                        and "cse_cs" not in d.metadata.get("source", "").lower()
+                    )
+                ][:settings.RETRIEVAL_FETCH_K]
+                documents.extend(hod_docs)
+
+            # =====================================
             # Faculty Retrieval — filtered similarity search (no full db.get() scan)
             # =====================================
-            if cls.is_cse_faculty_question(question):
+            if cls.is_cse_faculty_question(question) and not cls.is_main_cse_hod_question(question):
                 logger.info("Using faculty filtered retrieval")
                 raw_faculty = db.similarity_search(
                     search_query,
@@ -191,6 +269,36 @@ class RetrievalService:
                         for m in ["master of technology", "m.tech", "mba", "mca", "postgraduate"]
                     ):
                         documents.append(doc)
+
+            # =====================================
+            # Placement Retrieval
+            # =====================================
+            if cls.is_placement_question(question):
+                logger.info("Using placement retrieval")
+                placement_query = f"{rewritten_query} MSRIT placement statistics companies package salary LPA offers"
+                raw_placement = db.similarity_search(placement_query, k=settings.RETRIEVAL_FETCH_K * 2)
+                placement_docs = [
+                    d for d in raw_placement
+                    if d.metadata.get("page_type") == "placements"
+                    or "placement" in d.metadata.get("source", "").lower()
+                    or any(t in d.page_content.lower() for t in ["lpa", "package", "companies visited", "job offers"])
+                ][:settings.RETRIEVAL_FETCH_K]
+                documents.extend(placement_docs)
+
+            # =====================================
+            # Department Retrieval
+            # =====================================
+            if cls.is_department_question(question):
+                logger.info("Using department retrieval")
+                dept_query = f"{rewritten_query} MSRIT departments programs engineering courses offered"
+                raw_dept = db.similarity_search(dept_query, k=settings.RETRIEVAL_FETCH_K * 2)
+                dept_docs = [
+                    d for d in raw_dept
+                    if d.metadata.get("page_type") == "department"
+                    or "department" in d.metadata.get("source", "").lower()
+                    or "departments-overview" in d.metadata.get("source", "").lower()
+                ][:settings.RETRIEVAL_FETCH_K]
+                documents.extend(dept_docs)
 
             # =====================================
             # Main Retrieval Strategy

@@ -3,6 +3,8 @@ def build_chat_prompt(question: str, context: str, recent_history: str) -> str:
 
 STRICT RULES:
 - Answer ONLY using the CONTEXT section below. Never invent or assume facts.
+- You ONLY answer questions related to MSRIT — academics, admissions, fees, hostel, placements, departments, faculty, events, or campus life.
+- If the question is completely unrelated to MSRIT (e.g. weather, general knowledge, math problems, other colleges, politics), respond exactly: "I can only answer questions about MSRIT. Please ask something related to the college."
 - If the context does not contain the answer, respond exactly: "I don't have that information. Please visit msrit.edu or contact the relevant department directly."
 - Use bullet points for lists and structured data. Use plain prose for explanations.
 - Keep answers concise and factual.
@@ -59,7 +61,10 @@ User Question: "Is MSRIT NAAC accredited?"
 Search Query: MSRIT NAAC accreditation grade and status
 
 User Question: "Who is the HOD of CSE?"
-Search Query: Head of Department Professor Head Computer Science Engineering CSE MSRIT
+Search Query: Head of Department HOD CSE Computer Science Dr R China Appala Naidu MSRIT
+
+User Question: "Who is the head of CSE department?"
+Search Query: Head of Department HOD CSE Computer Science Engineering MSRIT
 
 User Question: "Who is the principal?"
 Search Query: Principal Director head MSRIT administration leadership
