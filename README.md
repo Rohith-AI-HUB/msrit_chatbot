@@ -111,7 +111,7 @@ docker compose up --build
 ### 4. Open the app
 
 ```
-http://localhost
+http://localhost:80
 ```
 
 The chat UI will be ready once all health checks pass. You can watch the logs with:
