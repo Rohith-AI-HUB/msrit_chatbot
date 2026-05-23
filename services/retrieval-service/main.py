@@ -60,11 +60,14 @@ def search(request: SearchRequest):
     # Faculty-specific retrieval
     if is_cse_faculty_question(request.question):
         logger.info("Using faculty filtered retrieval")
-        faculty_docs = db.similarity_search(
+        raw_faculty = db.similarity_search(
             search_query,
-            k=settings.RETRIEVAL_FETCH_K,
-            filter={"source": {"$contains": "faculty"}}
+            k=settings.RETRIEVAL_FETCH_K * 3,
         )
+        faculty_docs = [
+            d for d in raw_faculty
+            if "faculty" in d.metadata.get("source", "").lower()
+        ][:settings.RETRIEVAL_FETCH_K]
         documents.extend(faculty_docs)
 
     # PG-specific retrieval

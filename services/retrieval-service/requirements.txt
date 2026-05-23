@@ -3,7 +3,7 @@ uvicorn
 langchain
 langchain-community
 langchain-core
-chromadb
+faiss-cpu
 sentence-transformers
 huggingface-hub
 pydantic

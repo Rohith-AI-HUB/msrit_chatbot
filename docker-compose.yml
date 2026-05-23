@@ -63,7 +63,7 @@ services:
       - msrit-net
 
   # ------------------------------------------
-  # RETRIEVAL SERVICE — ChromaDB vector search
+  # RETRIEVAL SERVICE — FAISS vector search
   # ------------------------------------------
   retrieval-service:
     build:
