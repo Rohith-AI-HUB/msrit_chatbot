@@ -1,4 +1,4 @@
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
 from app.core.config import settings
@@ -35,20 +35,22 @@ class VectorStoreManager:
         if cls._db is None:
 
             logger.info(
-                f"Connecting to ChromaDB: "
+                f"Loading FAISS index: "
                 f"{settings.VECTOR_DB_DIR}"
             )
 
             embedding_model = cls.get_embedding_model()
 
-            cls._db = Chroma(
-                persist_directory=str(
-                    settings.VECTOR_DB_DIR
-                ),
-                embedding_function=embedding_model
+            cls._db = FAISS.load_local(
+                str(settings.VECTOR_DB_DIR),
+                embeddings=embedding_model,
+                allow_dangerous_deserialization=True
             )
 
-            logger.info("Vector DB initialized")
+            logger.info(
+                f"FAISS index loaded — "
+                f"{cls._db.index.ntotal} vectors"
+            )
 
         return cls._db
 
@@ -59,9 +61,7 @@ class VectorStoreManager:
 
             db = cls.get_db()
 
-            db._collection.count()
-
-            return True
+            return db.index.ntotal > 0
 
         except Exception as e:
 

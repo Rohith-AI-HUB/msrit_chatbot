@@ -6,8 +6,12 @@ __pycache__/
 venv/
 .env
 
-# Vector DB
+# Vector DB — generated data files (too large for git, rebuild locally)
 data/pdfs
+data/chroma_db/
+data/section_store.json
+data/*.faiss
+data/*.pkl
 /tests/
 # OS
 pytest.ini

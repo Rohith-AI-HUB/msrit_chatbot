@@ -33,6 +33,10 @@ from app.services.result_service import (
     ResultService
 )
 
+from app.services.section_fetch_service import (
+    SectionFetchService
+)
+
 from app.utils.prompts import (
     build_chat_prompt,
     build_no_context_response
@@ -179,12 +183,42 @@ def chat(
             )
 
         # =========================
+        # Section Fetch (full section for best chunk)
+        # =========================
+        full_section = SectionFetchService.get_best_section_context(documents)
+
+        # =========================
         # Build Context
         # =========================
-        context = "\n\n".join([
-            doc.page_content
-            for doc in documents
-        ])
+        if full_section:
+            # Find which section_id the full_section belongs to so we can
+            # avoid repeating those chunk texts verbatim in the context.
+            def _score(doc):
+                m = doc.metadata
+                for k in ("boosted_score", "adjusted_score", "score"):
+                    v = m.get(k)
+                    if v is not None:
+                        return float(v)
+                return 0.0
+            best_section_id = max(
+                enumerate(documents),
+                key=lambda p: (_score(p[1]), -p[0]),
+            )[1].metadata.get("section_id")
+
+            other_chunks = "\n\n".join(
+                doc.page_content
+                for doc in documents
+                if doc.metadata.get("section_id") != best_section_id
+            )
+
+            context = "[Complete Section]\n" + full_section
+            if other_chunks:
+                context += "\n\n---\n\n" + other_chunks
+        else:
+            context = "\n\n".join([
+                doc.page_content
+                for doc in documents
+            ])
 
         sources = list(set([
             doc.metadata.get(
