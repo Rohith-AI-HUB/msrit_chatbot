@@ -81,7 +81,7 @@ async def fetch_portal_data(usn: str, dob: str) -> dict:
 async def _login_and_scrape(page: Page, usn: str, dob_parts: dict) -> dict:
     logger.info(f"Navigating to {settings.PORTAL_URL}")
     await page.goto(settings.PORTAL_URL, wait_until="domcontentloaded", timeout=settings.SCRAPE_TIMEOUT_MS)
-    await page.wait_for_timeout(1500)
+    await page.wait_for_timeout(5000)  # Give more time for page to settle
 
     # ── Fill USN (Username field with placeholder "USN") ──────────────────────
     usn_selectors = [
@@ -97,7 +97,7 @@ async def _login_and_scrape(page: Page, usn: str, dob_parts: dict) -> dict:
     for sel in usn_selectors:
         try:
             el = page.locator(sel).first
-            if await el.is_visible(timeout=800):
+            if await el.is_visible(timeout=5000):
                 usn_el = el
                 break
         except Exception:
@@ -135,7 +135,7 @@ async def _login_and_scrape(page: Page, usn: str, dob_parts: dict) -> dict:
     for sel in login_selectors:
         try:
             el = page.locator(sel).first
-            if await el.is_visible(timeout=800):
+            if await el.is_visible(timeout=5000):
                 await el.click()
                 clicked = True
                 logger.info(f"Clicked login: {sel}")
@@ -150,7 +150,7 @@ async def _login_and_scrape(page: Page, usn: str, dob_parts: dict) -> dict:
     # Wait for navigation after login
     await page.wait_for_timeout(settings.NAV_WAIT_MS)
     try:
-        await page.wait_for_load_state("networkidle", timeout=15_000)
+        await page.wait_for_load_state("networkidle", timeout=45_000)  # Increased to 45s
     except Exception:
         pass
 
@@ -405,10 +405,10 @@ async def _scrape_cie_marks(page: Page) -> list:
         return []
 
     try:
-        async with page.expect_navigation(wait_until="domcontentloaded", timeout=15000):
+        async with page.expect_navigation(wait_until="domcontentloaded", timeout=45000):
             await page.evaluate("document.querySelector(\"a[href*='ciedetails']\").click()")
     except Exception:
-        await page.wait_for_timeout(3000)   # fallback if navigation event misfires
+        await page.wait_for_timeout(5000)   # fallback if navigation event misfires
 
     logger.info(f"Navigated to CIE page: {page.url[:60]}")
 
@@ -440,10 +440,10 @@ async def _scrape_cie_marks(page: Page) -> list:
             # expect_navigation (waits for load to complete) to avoid
             # "Execution context was destroyed" errors from unwaited navigation
             try:
-                async with page.expect_navigation(wait_until="domcontentloaded", timeout=10000):
+                async with page.expect_navigation(wait_until="domcontentloaded", timeout=45000):
                     await page.evaluate(f"window.location.href = '{url}'")
             except Exception:
-                await page.wait_for_timeout(2000)   # fallback
+                await page.wait_for_timeout(5000)   # fallback
 
             # Extract course name: "COURSECODE - Course Name" pattern in body
             body_text = await page.inner_text("body")
@@ -513,10 +513,10 @@ async def _scrape_exam_history(page: Page, url: str) -> Optional[dict]:
         }
     """
     try:
-        async with page.expect_navigation(wait_until="domcontentloaded", timeout=15000):
+        async with page.expect_navigation(wait_until="domcontentloaded", timeout=45000):
             await page.evaluate(f"window.location.href = '{url}'")
     except Exception:
-        await page.wait_for_timeout(3000)
+        await page.wait_for_timeout(5000)
 
     logger.info(f"Navigated to exam history: {page.url[:80]}")
     body_text = await page.inner_text("body")
