@@ -46,7 +46,7 @@ from playwright.async_api import Browser, BrowserContext, Page, Response, async_
 
 START_URL = "https://msrit.edu/"
 
-ALLOWED_DOMAINS = {"msrit.edu", "www.msrit.edu"}
+ALLOWED_DOMAINS = {"msrit.edu", "www.msrit.edu", "parents.msrit.edu"}
 
 # Common paths probed on startup even if not linked from homepage
 SEED_PATHS = [
@@ -70,7 +70,7 @@ SEED_PATHS = [
 ]
 
 MAX_PAGES = 600          # hard cap on pages crawled
-PAGE_TIMEOUT = 20_000    # ms — per page (domcontentloaded, not networkidle)
+PAGE_TIMEOUT = 60_000    # ms — increased to 60 sec for slow parents site
 NAV_HOVER_DELAY = 150    # ms — wait after each nav hover
 INTERACT_DELAY = 200     # ms — wait after tab / accordion click
 MAX_ITEMS_PER_SEL = 40   # max elements to interact with per selector
@@ -159,6 +159,10 @@ class MSRITIntelligentCrawler:
         self.pdf_queue: set[str] = set()
         self.pages: dict[str, PageData] = {}
         self.errors: list[str] = []
+        
+        # Add parents site URLs explicitly
+        self._enqueue("https://parents.msrit.edu/newparents/index.php")
+        self._enqueue("https://parents.msrit.edu/newparentsodd/index.php")
 
     # ── queue helpers ──────────────────────────────────────────
 

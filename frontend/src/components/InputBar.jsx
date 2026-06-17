@@ -66,20 +66,6 @@ export default function InputBar({ onSend, isLoading }) {
     <div className="shrink-0 px-4 py-3 bg-white border-t border-slate-200">
       <div className="max-w-3xl mx-auto flex items-end gap-2">
 
-        {/* Voice button */}
-        <button
-          onClick={toggleMic}
-          title={listening ? 'Stop listening' : 'Voice input'}
-          className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center
-                      transition-colors
-                      ${listening
-                        ? 'bg-red-100 text-red-500 hover:bg-red-200'
-                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                      }`}
-        >
-          {listening ? <Square size={16} /> : <Mic size={16} />}
-        </button>
-
         {/* Text area */}
         <div className="flex-1 flex items-end bg-slate-100 rounded-2xl px-3 py-2
                         border border-transparent focus-within:border-msrit-blue
