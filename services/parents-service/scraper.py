@@ -40,48 +40,68 @@ async def fetch_portal_data(usn: str, dob: str) -> dict:
           "raw_text": "..."   # fallback plain text
         }
     """
-    logger.info(f"Fetching portal data for USN={usn}")
+    logger.info(f"Fetching portal data for USN={usn}, timeout={settings.SCRAPE_TIMEOUT_MS}ms")
 
     dob_parts = _parse_dob(dob)
     if not dob_parts:
         return {"success": False, "error": "Could not parse date of birth. Use DD/MM/YYYY format."}
 
-    async with async_playwright() as pw:
-        browser: Browser = await pw.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-            ],
-        )
-        context = await browser.new_context(
-            viewport={"width": 1280, "height": 900},
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-        )
-        page = await context.new_page()
+    try:
+        async with async_playwright() as pw:
+            browser: Browser = await pw.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                ],
+            )
+            context = await browser.new_context(
+                viewport={"width": 1280, "height": 900},
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+            )
+            page = await context.new_page()
 
-        try:
-            result = await _login_and_scrape(page, usn, dob_parts)
-            return result
-        except Exception as exc:
-            logger.exception(f"Scraper error: {exc}")
-            return {"success": False, "error": str(exc)}
-        finally:
-            await browser.close()
+            try:
+                result = await _login_and_scrape(page, usn, dob_parts)
+                return result
+            finally:
+                await browser.close()
+    except Exception as exc:
+        logger.exception(f"Scraper error: {exc}")
+        error_msg = str(exc)
+        if "timeout" in error_msg.lower():
+            error_msg = f"Portal took too long to respond: {error_msg}"
+        elif "netconnectionerror" in error_msg.lower() or "net::err" in error_msg.lower():
+            error_msg = f"Network connectivity error: {error_msg}"
+        return {"success": False, "error": error_msg}
 
 
 # ── Login ─────────────────────────────────────────────────────────────────────
 
 async def _login_and_scrape(page: Page, usn: str, dob_parts: dict) -> dict:
     logger.info(f"Navigating to {settings.PORTAL_URL}")
-    await page.goto(settings.PORTAL_URL, wait_until="domcontentloaded", timeout=settings.SCRAPE_TIMEOUT_MS)
-    await page.wait_for_timeout(5000)  # Give more time for page to settle
+    try:
+        await page.goto(settings.PORTAL_URL, wait_until="domcontentloaded", timeout=settings.SCRAPE_TIMEOUT_MS)
+        logger.info(f"Page loaded successfully. URL: {page.url}")
+        await page.wait_for_timeout(5000)  # Give more time for page to settle
+
+        # Log page content for debugging
+        page_text = await page.inner_text("body")
+        logger.info(f"Page loaded with {len(page_text)} characters. First 500 chars: {page_text[:500]}")
+
+        # Count inputs and selects on the page
+        input_count = await page.locator("input").count()
+        select_count = await page.locator("select").count()
+        logger.info(f"Found {input_count} input fields and {select_count} select dropdowns")
+    except Exception as e:
+        logger.error(f"Failed to load page: {type(e).__name__}: {str(e)}")
+        return {"success": False, "error": f"Failed to load portal page: {str(e)}. Check network connectivity or portal URL."}
 
     # ── Fill USN (Username field with placeholder "USN") ──────────────────────
     usn_selectors = [
@@ -99,12 +119,16 @@ async def _login_and_scrape(page: Page, usn: str, dob_parts: dict) -> dict:
             el = page.locator(sel).first
             if await el.is_visible(timeout=5000):
                 usn_el = el
+                logger.info(f"Found USN field with selector: {sel}")
                 break
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Selector {sel} failed: {e}")
 
     if usn_el is None:
-        return {"success": False, "error": "Could not find the USN input field on the login page."}
+        page_html = await page.content()
+        logger.error(f"Could not find USN field. Page HTML length: {len(page_html)}")
+        logger.error(f"Page URL: {page.url}")
+        return {"success": False, "error": "Could not find the USN input field on the login page. The portal page structure may have changed."}
 
     await usn_el.fill(usn)
     logger.info(f"USN filled: {usn}")
@@ -135,17 +159,19 @@ async def _login_and_scrape(page: Page, usn: str, dob_parts: dict) -> dict:
     for sel in login_selectors:
         try:
             el = page.locator(sel).first
-            if await el.is_visible(timeout=5000):
+            count = await page.locator(sel).count()
+            if count > 0 and await el.is_visible(timeout=5000):
                 await el.click()
                 clicked = True
-                logger.info(f"Clicked login: {sel}")
+                logger.info(f"Clicked login button with selector: {sel}")
                 break
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Login selector {sel} failed: {e}")
 
     if not clicked:
+        logger.warning("No login button found via selectors, trying Enter key")
         await page.keyboard.press("Enter")
-        logger.info("Login via Enter key")
+        logger.info("Login attempted via Enter key")
 
     # Wait for navigation after login
     await page.wait_for_timeout(settings.NAV_WAIT_MS)

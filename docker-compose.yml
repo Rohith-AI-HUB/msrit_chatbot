@@ -46,7 +46,7 @@ services:
       - SESSION_SERVICE_URL=http://session-service:8003
       - PARENTS_SERVICE_URL=http://parents-service:8004
       - REQUEST_TIMEOUT=30
-      - PARENTS_PORTAL_TIMEOUT=60
+      - PARENTS_PORTAL_TIMEOUT=240
     depends_on:
       retrieval-service:
         condition: service_healthy
@@ -105,9 +105,9 @@ services:
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
       interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 60s   # extra time for model load on first start
+      timeout: 10s
+      retries: 10
+      start_period: 180s   # extra time for embedding model download on first start
     restart: unless-stopped
     networks:
       - msrit-net
