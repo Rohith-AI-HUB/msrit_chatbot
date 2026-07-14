@@ -24,11 +24,12 @@ from playwright.async_api import async_playwright, Page
 RESULTS_URL = "https://exam.msrit.edu/"
 
 RESULT_INTENT_KEYWORDS = [
-    "my result", "my marks", "my grade", "my score",
+    "result", "my result", "my marks", "my grade", "my score",
     "check result", "exam result", "semester result",
     "show result", "view result", "what are my marks",
     "check my result", "see my result", "view my result",
     "my exam result", "my semester result",
+    "want my result", "want my marks", "get my result",
 ]
 
 # Keywords that override result intent detection (prevent false positives)
@@ -64,6 +65,13 @@ class ResultSession:
     result_text: str = ""
     error: str = ""
     thread: Optional[threading.Thread] = field(default=None, repr=False)
+
+
+@dataclass
+class ResultResponse:
+    """Structured response from the result flow with input type hint for the frontend."""
+    answer: str
+    input_type: Optional[str] = None
 
 
 # In-memory store — one per chat session
@@ -107,9 +115,9 @@ class ResultService:
     # ── state machine ─────────────────────────────────────────────
 
     @classmethod
-    def handle(cls, session_id: str, question: str) -> Optional[str]:
+    def handle(cls, session_id: str, question: str) -> Optional[ResultResponse]:
         """
-        Main entry point. Returns a response string if the question
+        Main entry point. Returns a ResultResponse if the question
         is part of the result flow, or None to fall through to RAG.
         """
         q = question.strip()
@@ -118,9 +126,12 @@ class ResultService:
         if not cls.in_flow(session_id):
             if is_result_intent(q):
                 cls._start(session_id)
-                return (
-                    "I can check your result from the MSRIT exam portal.\n\n"
-                    "Please provide your **USN** (e.g. 1MS22CS001)."
+                return ResultResponse(
+                    answer=(
+                        "I can check your result from the MSRIT exam portal.\n\n"
+                        "Please provide your **USN** (e.g. 1MS22CS001)."
+                    ),
+                    input_type="usn"
                 )
             return None  # not a result query
 
@@ -131,41 +142,56 @@ class ResultService:
             # Accept anything that looks like a USN (alphanumeric, 6-15 chars)
             usn = re.sub(r'\s+', '', q).upper()
             if len(usn) < 6 or len(usn) > 15 or not re.search(r'\d', usn):
-                return "That doesn't look like a valid USN. Please enter it again (e.g. 1MS22CS001)."
+                return ResultResponse(
+                    answer="That doesn't look like a valid USN. Please enter it again (e.g. 1MS22CS001).",
+                    input_type="usn"
+                )
             session.usn = usn
             session.status = "waiting_dob"
-            return f"USN set to **{usn}**.\n\nNow enter your **Date of Birth** in DD/MM/YYYY format."
+            return ResultResponse(
+                answer=f"USN set to **{usn}**.\n\nNow enter your **Date of Birth** in DD/MM/YYYY format.",
+                input_type="dob"
+            )
 
         # ── Collecting DOB ──
         if session.status == "waiting_dob":
             dob = q.strip()
             if not re.search(r'\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}', dob):
-                return "Please enter date of birth in **DD/MM/YYYY** format (e.g. 15/08/2002)."
+                return ResultResponse(
+                    answer="Please enter date of birth in **DD/MM/YYYY** format (e.g. 15/08/2002).",
+                    input_type="dob"
+                )
             session.dob = dob
             session.status = "browser_open"
             cls._launch_browser(session_id)
-            return (
-                f"**Opening browser...**\n\n"
-                f"- USN: `{session.usn}`\n"
-                f"- DOB: `{session.dob}`\n\n"
-                f"The form is being filled in the browser window that just opened on your screen. "
-                f"**Solve the CAPTCHA** and click **Submit**.\n\n"
-                f"Once submitted, type **show result** here."
+            return ResultResponse(
+                answer=(
+                    f"**Opening browser...**\n\n"
+                    f"- USN: `{session.usn}`\n"
+                    f"- DOB: `{session.dob}`\n\n"
+                    f"The form is being filled in the browser window that just opened on your screen. "
+                    f"**Solve the CAPTCHA** and click **Submit**.\n\n"
+                    f"Once submitted, type **show result** here."
+                )
             )
 
         # ── Browser open — waiting for user to submit ──
         if session.status == "browser_open":
             if is_show_result(q):
-                return (
-                    "Still waiting for the browser to return your result.\n"
-                    "Please make sure you solved the CAPTCHA and clicked Submit in the browser window. "
-                    "Then type **show result** again."
+                return ResultResponse(
+                    answer=(
+                        "Still waiting for the browser to return your result.\n"
+                        "Please make sure you solved the CAPTCHA and clicked Submit in the browser window. "
+                        "Then type **show result** again."
+                    )
                 )
-            return (
-                "The browser window is open on your screen.\n"
-                "1. Solve the CAPTCHA\n"
-                "2. Click Submit\n"
-                "3. Type **show result** here once done."
+            return ResultResponse(
+                answer=(
+                    "The browser window is open on your screen.\n"
+                    "1. Solve the CAPTCHA\n"
+                    "2. Click Submit\n"
+                    "3. Type **show result** here once done."
+                )
             )
 
         # ── Result ready ──
@@ -175,14 +201,18 @@ class ResultService:
             if result:
                 # Trim to first 3000 chars to keep response readable
                 trimmed = result[:3000] + ("..." if len(result) > 3000 else "")
-                return f"**Your Result:**\n\n```\n{trimmed}\n```"
-            return "The page loaded but result content could not be extracted. Please check the browser window."
+                return ResultResponse(answer=f"**Your Result:**\n\n```\n{trimmed}\n```")
+            return ResultResponse(
+                answer="The page loaded but result content could not be extracted. Please check the browser window."
+            )
 
         # ── Error ──
         if session.status == "error":
             err = session.error
             cls._clear(session_id)
-            return f"Result fetch failed: {err}\n\nType 'check result' to try again."
+            return ResultResponse(
+                answer=f"Result fetch failed: {err}\n\nType 'check result' to try again."
+            )
 
         return None
 

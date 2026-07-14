@@ -1,8 +1,6 @@
 import json
 from typing import List
 
-import redis
-
 from config import settings
 from shared.logging import setup_logger
 
@@ -17,8 +15,15 @@ class RedisStore:
     @classmethod
     def get_redis(cls):
         if cls._redis is None:
-            logger.info(f"Connecting to Redis: {settings.REDIS_URL}")
-            cls._redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
+            try:
+                import redis
+                logger.info(f"Connecting to Redis: {settings.REDIS_URL}")
+                cls._redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
+                cls._redis.ping()
+            except Exception:
+                logger.warning("Redis unavailable, using in-memory store")
+                from fakeredis import FakeRedis
+                cls._redis = FakeRedis(decode_responses=True)
         return cls._redis
 
     @classmethod

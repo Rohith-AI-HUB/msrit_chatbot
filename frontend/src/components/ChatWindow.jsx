@@ -3,7 +3,7 @@ import Message from './Message'
 import TypingIndicator from './TypingIndicator'
 import WelcomeScreen from './WelcomeScreen'
 
-export default function ChatWindow({ messages, isLoading, setFeedback, onSuggest }) {
+export default function ChatWindow({ messages, isLoading, setFeedback, onSuggest, onSend }) {
   const bottomRef = useRef(null)
 
   // Auto-scroll to latest message
@@ -27,6 +27,8 @@ export default function ChatWindow({ messages, isLoading, setFeedback, onSuggest
             key={msg.id}
             msg={msg}
             onFeedback={setFeedback}
+            onSend={onSend}
+            isLoading={isLoading}
           />
         ))}
 

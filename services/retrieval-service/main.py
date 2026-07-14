@@ -12,6 +12,7 @@ from vector_store import VectorStoreManager
 from search_strategies import (
     is_pg_question,
     is_cse_faculty_question,
+    is_fee_question,
     is_factual_query,
     build_search_query,
     rerank_documents,
@@ -81,6 +82,19 @@ def search(request: SearchRequest):
             ):
                 documents.append(doc)
 
+    # Fee-specific retrieval
+    if is_fee_question(request.question):
+        logger.info("Using fee-specific retrieval")
+        fee_query = f"{request.rewritten_query} fee structure tuition charges scholarship amount"
+        fee_docs = db.similarity_search(fee_query, k=settings.RETRIEVAL_FETCH_K)
+        for doc in fee_docs:
+            page_type = doc.metadata.get("page_type", "")
+            content = doc.page_content.lower()
+            if page_type == "fees" or any(
+                k in content for k in ["rs.", "fee", "tuition", "₹", "scholarship"]
+            ):
+                documents.append(doc)
+
     # Main retrieval strategy
     use_similarity = is_factual_query(request.question)
     logger.info(f"Strategy: {'similarity' if use_similarity else 'MMR'}")
@@ -93,7 +107,12 @@ def search(request: SearchRequest):
         )
         for doc, score in scored_results:
             doc.metadata["score"] = round(score, 4)
-            semantic_docs.append(doc)
+            if score >= settings.RELEVANCE_SCORE_THRESHOLD:
+                semantic_docs.append(doc)
+        logger.info(
+            f"Similarity search: {len(scored_results)} results, "
+            f"{len(semantic_docs)} above threshold {settings.RELEVANCE_SCORE_THRESHOLD}"
+        )
     else:
         semantic_docs = db.max_marginal_relevance_search(
             search_query,

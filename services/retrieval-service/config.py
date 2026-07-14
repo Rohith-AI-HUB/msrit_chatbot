@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     VECTOR_DB_DIR: str = "/app/data/chroma_db"
     RETRIEVAL_TOP_K: int = 6
     RETRIEVAL_FETCH_K: int = 20
+    RELEVANCE_SCORE_THRESHOLD: float = 0.25
 
     class Config:
         env_file = ".env"

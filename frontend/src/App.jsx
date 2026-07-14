@@ -15,6 +15,7 @@ export default function App() {
         isLoading={isLoading}
         setFeedback={setFeedback}
         onSuggest={sendMessage}
+        onSend={sendMessage}
       />
 
       <InputBar onSend={sendMessage} isLoading={isLoading} />

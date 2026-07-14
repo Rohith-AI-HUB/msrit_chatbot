@@ -31,6 +31,14 @@ def is_pg_question(question: str) -> bool:
     ])
 
 
+def is_fee_question(question: str) -> bool:
+    q = question.lower()
+    return any(k in q for k in [
+        "fee", "fees", "tuition", "scholarship", "cost", "payment",
+        "how much", "expense", "charges"
+    ])
+
+
 def is_cse_faculty_question(question: str) -> bool:
     q = question.lower()
     return (
@@ -52,6 +60,9 @@ def build_search_query(question: str, rewritten_query: str) -> str:
 
     if is_pg_question(question):
         return f"{rewritten_query} MSRIT postgraduate programs M.Tech MBA MCA M.Arch"
+
+    if is_fee_question(question):
+        return f"{rewritten_query} MSRIT fee structure tuition charges scholarship amount Rupees"
 
     if any(w in q for w in ["department", "departments", "branch", "branches"]):
         return f"{rewritten_query} MSRIT engineering departments"

@@ -30,7 +30,8 @@ from app.services.session_service import (
 )
 
 from app.services.result_service import (
-    ResultService
+    ResultService,
+    ResultResponse
 )
 
 from app.utils.prompts import (
@@ -73,18 +74,19 @@ def chat(
         # =========================
         # Result Flow (before RAG)
         # =========================
-        result_response = ResultService.handle(
+        result_data = ResultService.handle(
             session_id=request.session_id,
             question=request.question
         )
-        if result_response is not None:
+        if result_data is not None:
             SessionService.add_message(
                 session_id=request.session_id,
                 question=request.question,
-                answer=result_response
+                answer=result_data.answer
             )
             return ChatResponse(
-                answer=result_response,
+                answer=result_data.answer,
+                input_type=result_data.input_type,
                 sources=[],
                 rewritten_query="",
                 retrieved_documents_count=0,

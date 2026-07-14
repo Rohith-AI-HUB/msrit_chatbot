@@ -18,6 +18,7 @@ class RetrievedChunk(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+    input_type: Optional[str] = None
     sources: List[str]
     rewritten_query: Optional[str] = None
     retrieved_documents_count: int

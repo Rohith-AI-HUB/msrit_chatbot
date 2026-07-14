@@ -35,6 +35,7 @@ export function useChat() {
         id: makeId(),
         role: 'assistant',
         content: data.answer,
+        inputType: data.input_type ?? null,
         sources: data.sources ?? [],
         rewrittenQuery: data.rewritten_query ?? null,
         docCount: data.retrieved_documents_count ?? 0,

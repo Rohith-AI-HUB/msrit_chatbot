@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { ThumbsUp, ThumbsDown } from 'lucide-react'
+import { ThumbsUp, ThumbsDown, Send } from 'lucide-react'
 import SourceList from './SourceList'
 
 /** Renders bot answer using full Markdown — bullets, tables, code blocks, bold, etc. */
@@ -107,7 +108,63 @@ function MarkdownContent({ text }) {
   )
 }
 
-function BotMessage({ msg, onFeedback }) {
+function InlineInput({ inputType, onSend, isLoading }) {
+  const [value, setValue] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+
+  const placeholder = inputType === 'usn'
+    ? 'Enter your USN (e.g. 1MS22CS001)'
+    : 'Enter your DOB (DD/MM/YYYY)'
+
+  function handleSubmit() {
+    const v = value.trim()
+    if (!v || isLoading) return
+    setSubmitted(true)
+    onSend(v)
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
+
+  if (submitted) {
+    return (
+      <div className="mt-3 px-3 py-2 bg-slate-50 rounded-lg text-sm text-slate-600 border border-slate-200">
+        {value}
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-3 flex items-center gap-2">
+      <input
+        type="text"
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        disabled={isLoading}
+        autoFocus
+        className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-xl
+                   focus:outline-none focus:border-msrit-blue focus:ring-1 focus:ring-msrit-blue/20
+                   placeholder-slate-400 disabled:opacity-50 bg-white transition-colors"
+      />
+      <button
+        onClick={handleSubmit}
+        disabled={!value.trim() || isLoading}
+        className="shrink-0 w-9 h-9 rounded-xl bg-msrit-navy text-white flex items-center justify-center
+                   hover:bg-msrit-blue transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        <Send size={14} />
+      </button>
+    </div>
+  )
+}
+
+function BotMessage({ msg, onFeedback, onSend, isLoading }) {
   return (
     <div className="flex items-start gap-2.5">
       {/* Avatar */}
@@ -122,6 +179,15 @@ function BotMessage({ msg, onFeedback }) {
                        ${msg.isError ? 'border-red-200 bg-red-50' : 'border-slate-100'}`}>
 
         <MarkdownContent text={msg.content} />
+
+        {/* Inline input for USN/DOB */}
+        {msg.inputType && onSend && (
+          <InlineInput
+            inputType={msg.inputType}
+            onSend={onSend}
+            isLoading={isLoading}
+          />
+        )}
 
         {/* Rewritten query hint */}
         {msg.rewrittenQuery && msg.rewrittenQuery !== msg.content && (
@@ -182,7 +248,7 @@ function UserMessage({ msg }) {
   )
 }
 
-export default function Message({ msg, onFeedback }) {
+export default function Message({ msg, onFeedback, onSend, isLoading }) {
   if (msg.role === 'user') return <UserMessage msg={msg} />
-  return <BotMessage msg={msg} onFeedback={onFeedback} />
+  return <BotMessage msg={msg} onFeedback={onFeedback} onSend={onSend} isLoading={isLoading} />
 }

@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import settings
 from clients import RetrievalClient, LLMClient, SessionClient
 from prompts import build_chat_prompt, build_no_context_response
+from result_service import ResultService
 from shared.logging import setup_logger
 from shared.schemas.chat import (
     ChatRequest,
@@ -59,6 +60,24 @@ def chat(request: ChatRequest):
 
     try:
         logger.info(f"Question: {request.question} | session={request.session_id}")
+
+        # ==========================
+        # Result Flow (before RAG)
+        # ==========================
+        result_data = ResultService.handle(
+            session_id=request.session_id,
+            question=request.question,
+        )
+        if result_data is not None:
+            SessionClient.add_message(request.session_id, request.question, result_data.answer)
+            return ChatResponse(
+                answer=result_data.answer,
+                input_type=result_data.input_type,
+                sources=[],
+                rewritten_query="",
+                retrieved_documents_count=0,
+                debug_chunks=[],
+            )
 
         # ==========================
         # Step 1: Rewrite Query

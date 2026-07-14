@@ -1,8 +1,6 @@
 import hashlib
 import json
 
-import redis
-
 from config import settings
 from shared.logging import setup_logger
 
@@ -17,7 +15,14 @@ class LLMCache:
     @classmethod
     def get_redis(cls):
         if cls._redis is None:
-            cls._redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
+            try:
+                import redis
+                cls._redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
+                cls._redis.ping()
+            except Exception:
+                logger.warning("Redis unavailable, using in-memory cache")
+                from fakeredis import FakeRedis
+                cls._redis = FakeRedis(decode_responses=True)
         return cls._redis
 
     @classmethod
